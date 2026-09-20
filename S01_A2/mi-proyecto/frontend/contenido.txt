@@ -1,0 +1,1 @@
+Esta carpeta contendrá los archivos de configuración y dependencias del frontend con React, TypeScript y Vite, además de recursos de pruebas. El código de la interfaz se organizará dentro de src/.

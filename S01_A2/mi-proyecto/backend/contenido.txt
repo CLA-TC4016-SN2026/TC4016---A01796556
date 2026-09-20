@@ -1,0 +1,1 @@
+Esta carpeta contendrá los archivos de configuración y dependencias del backend en Python/FastAPI, así como recursos relacionados con pruebas y migraciones. El código fuente se organizará dentro de src/ cuando corresponda realizar el scaffolding.

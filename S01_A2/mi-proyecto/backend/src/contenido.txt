@@ -1,0 +1,1 @@
+Esta carpeta contendrá el código fuente del backend: API, modelos de dominio, esquemas de validación, servicios, persistencia y configuración de la aplicación. El contenido detallado se creará durante las semanas 5–6.

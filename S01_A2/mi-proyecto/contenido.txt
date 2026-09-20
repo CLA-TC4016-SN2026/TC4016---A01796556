@@ -1,0 +1,1 @@
+Esta carpeta es la raíz del sistema web de inventario. Contendrá la documentación general, archivos de configuración compartidos y las carpetas principales del backend, frontend, contenedores y documentación. En esta etapa no contiene código funcional.

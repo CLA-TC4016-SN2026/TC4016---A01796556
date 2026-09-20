@@ -1,0 +1,1 @@
+Esta carpeta contendrá posteriormente los archivos relacionados con contenedores y la configuración de Docker Compose para backend, frontend y PostgreSQL. En esta actividad no se generan Dockerfiles ni manifiestos detallados.
