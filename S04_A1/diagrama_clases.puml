@@ -1,0 +1,167 @@
+@startuml
+title StockIV — Diagrama de clases del dominio
+
+hide circle
+hide empty methods
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #1F4E79
+skinparam ClassBorderColor #1F4E79
+skinparam ClassBackgroundColor #F8FBFD
+skinparam EnumBorderColor #6A1B9A
+skinparam EnumBackgroundColor #F3E5F5
+
+enum UserRole {
+  ADMIN
+  INVENTORY_CLERK
+}
+
+enum MovementType {
+  ENTRY
+  EXIT
+  ADJUSTMENT_ENTRY
+  ADJUSTMENT_EXIT
+}
+
+class User <<entity>> {
+  +id: UUID
+  +name: String
+  +email: String
+  -passwordHash: String
+  +role: UserRole
+  +active: Boolean
+  +createdByUserId: UUID?
+  +createdAt: DateTime
+  +updatedAt: DateTime
+}
+
+class Product <<entity>> {
+  +id: UUID
+  +sku: String
+  +name: String
+  +description: String?
+  +category: String
+  +size: String?
+  +color: String?
+  +priceMxn: Decimal
+  +active: Boolean
+  +createdAt: DateTime
+  +updatedAt: DateTime
+}
+
+class Branch <<entity>> {
+  +id: UUID
+  +code: String
+  +name: String
+  +active: Boolean
+  +createdAt: DateTime
+  +updatedAt: DateTime
+}
+
+class StockLevel <<entity>> {
+  +productId: UUID
+  +branchId: UUID
+  +quantity: Integer
+  +minimumThreshold: Integer
+  +updatedAt: DateTime
+  +isLowStock(): Boolean
+}
+
+class Movement <<immutable entity>> {
+  +id: UUID
+  +type: MovementType
+  +quantity: Integer
+  +reason: String
+  +occurredAt: DateTime
+  +productId: UUID
+  +branchId: UUID
+  +userId: UUID
+  +transferId: UUID?
+  +compensatesMovementId: UUID?
+}
+
+class Transfer <<aggregate root>> {
+  +id: UUID
+  +productId: UUID
+  +sourceBranchId: UUID
+  +destinationBranchId: UUID
+  +quantity: Integer
+  +reason: String
+  +createdBy: UUID
+  +occurredAt: DateTime
+}
+
+class Session <<entity>> {
+  +id: UUID
+  +jti: UUID
+  +userId: UUID
+  +issuedAt: DateTime
+  +lastActivityAt: DateTime
+  +expiresAt: DateTime
+  +revokedAt: DateTime?
+}
+
+class LowStockAlert <<derived, read model>> {
+  +productId: UUID
+  +branchId: UUID
+  +quantity: Integer
+  +minimumThreshold: Integer
+}
+
+User ..> UserRole : usa
+Movement ..> MovementType : usa
+User "0..1 creador" <-- "0..* cuentas creadas" User : crea
+
+Product "1" -- "0..*" StockLevel : mantiene >
+Branch "1" -- "0..*" StockLevel : localiza >
+
+User "1" <-- "0..*" Movement : registrado por
+Product "1" <-- "0..*" Movement : afecta
+Branch "1" <-- "0..*" Movement : ocurre en
+
+User "1" <-- "0..*" Transfer : creada por
+Product "1" <-- "0..*" Transfer : transfiere
+Branch "1 origen" <-- "0..*" Transfer : sale de
+Branch "1 destino" <-- "0..*" Transfer : entra a
+Transfer "0..1" *-- "2" Movement : compone cuando es transferencia
+
+Movement "0..1 original" <-- "0..* compensaciones" Movement : compensa
+User "1" *-- "0..*" Session : posee
+StockLevel ..> LowStockAlert : deriva si quantity <= minimumThreshold
+
+note right of StockLevel
+  Clave única compuesta:
+  (productId, branchId)
+
+  quantity >= 0
+  minimumThreshold >= 0
+end note
+
+note right of Transfer
+  sourceBranchId != destinationBranchId
+  quantity > 0
+  Se confirma o revierte con sus dos
+  movimientos en una transacción ACID.
+  Los movimientos deben ser:
+  - un EXIT en la sucursal origen;
+  - un ENTRY en la sucursal destino;
+  - mismo producto y misma cantidad.
+end note
+
+note left of User
+  createdByUserId es nulo únicamente para el
+  administrador inicial creado por migración.
+end note
+
+note bottom of Movement
+  No admite actualización ni eliminación.
+  Una corrección crea otro movimiento y
+  establece compensatesMovementId.
+end note
+
+note bottom of LowStockAlert
+  No se persiste como fuente de verdad.
+  Es una proyección de StockLevel.
+end note
+@enduml

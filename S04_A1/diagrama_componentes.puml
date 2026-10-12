@@ -1,0 +1,84 @@
+@startuml
+title StockIV — Componentes internos y contenedores C4
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #1F4E79
+skinparam ComponentBorderColor #1F4E79
+skinparam ComponentBackgroundColor #EAF2F8
+skinparam InterfaceBorderColor #6A1B9A
+skinparam DatabaseBorderColor #2E7D32
+skinparam DatabaseBackgroundColor #E8F5E9
+
+actor "Usuario\n[Administrador o Encargado]" as User
+
+rectangle "StockIV <<Software System>>" as StockIV {
+  component "Aplicación web\n<<Container>>\nReact + TypeScript + Vite" as Frontend
+
+  package "API REST <<Container>>\nFastAPI + Python" as Backend {
+    component "Controladores REST\n<<presentation>>\nDTO y mapeo HTTP" as Controllers
+    component "Autenticación y RBAC\n<<security>>\nJWT, sesión y permisos" as Auth
+
+    package "Servicios de aplicación" as Application {
+      component "Usuarios y catálogo\n<<component>>" as Catalog
+      component "Inventario y alertas\n<<component>>" as Inventory
+      component "Movimientos y\ntransferencias\n<<component>>" as Movements
+    }
+
+    component "Modelo de dominio\n<<component>>\nEntidades, invariantes\ny políticas" as Domain
+    interface "Puertos de repositorio\n<<ports>>" as RepositoryPorts
+    interface "UnitOfWorkPort\n<<port>>\nbegin / commit / rollback" as UoWPort
+
+    package "Infraestructura" as Infrastructure {
+      component "SQLAlchemy Unit of Work\n<<adapter>>\nLímite transaccional" as SqlUoW
+      component "Adaptadores SQLAlchemy\n<<adapter>>\nRepositorios concretos" as Adapters
+    }
+  }
+
+  database "Base de datos\n<<Container>>\nPostgreSQL" as DB
+}
+
+User --> Frontend : Usa desde navegador\nHTTPS
+Frontend --> Controllers : REST/JSON sobre HTTPS\nOpenAPI 3.0.3 + Bearer JWT
+
+Controllers --> Auth : autentica y autoriza
+Controllers --> Catalog : invoca casos de uso
+Controllers --> Inventory : invoca casos de uso
+Controllers --> Movements : invoca casos de uso
+
+Catalog --> Domain : aplica reglas
+Inventory --> Domain : aplica reglas
+Movements --> Domain : aplica invariantes
+
+Auth --> RepositoryPorts : usuarios y sesiones
+Catalog --> RepositoryPorts : consulta/persiste
+Inventory --> RepositoryPorts : consulta/persiste
+Movements --> UoWPort : ejecuta atómicamente
+SqlUoW ..|> UoWPort : implementa
+Adapters ..|> RepositoryPorts : implementa
+SqlUoW --> Adapters : coordina repositorios
+Adapters --> DB : SQL/TLS\nSQLAlchemy
+
+note bottom of Backend
+  Dependencias permitidas:
+  presentación → aplicación → dominio/puertos ← infraestructura.
+  El dominio no depende de FastAPI, SQLAlchemy ni PostgreSQL.
+end note
+
+note bottom of DB
+  Unicidad: email, SKU y código de sucursal.
+  quantity >= 0; movimientos inmutables.
+end note
+
+legend bottom left
+  |= Notación |= Uso |
+  | <<Container>> | Unidad ejecutable o almacén C4 |
+  | <<component>> | Componente interno del backend |
+  | Interfaz circular | Puerto que infraestructura implementa |
+  | Flecha | Dependencia y protocolo |
+endlegend
+@enduml
+

@@ -1,0 +1,70 @@
+@startuml
+title StockIV — Diagrama UML de despliegue
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam ArrowColor #1F4E79
+skinparam NodeBorderColor #1F4E79
+skinparam NodeBackgroundColor #EAF2F8
+skinparam DatabaseBorderColor #2E7D32
+skinparam DatabaseBackgroundColor #E8F5E9
+skinparam ArtifactBorderColor #6A1B9A
+skinparam ArtifactBackgroundColor #F3E5F5
+
+node "Dispositivo del usuario\n<<device>>" as Client {
+  node "Navegador web\n<<execution environment>>\nChrome / Edge / Firefox / Safari" as Browser
+}
+
+cloud "Internet" as Internet
+
+cloud "Proveedor cloud\n<<execution environment>>" as Cloud {
+  node "Servidor de aplicación Linux\nSLA del proveedor >= 99.5 %" as AppServer {
+    node "Docker Engine\n<<execution environment>>" as Docker {
+      node "Contenedor Nginx\n<<execution environment>>\nReverse proxy y archivos estáticos" as Nginx {
+        artifact "frontend-dist.zip\nReact compilado" as FrontendArtifact
+      }
+
+      node "Contenedor API 1\n<<execution environment>>\nFastAPI + Uvicorn" as API1 {
+        artifact "stockiv-api:1.0\nImagen OCI" as APIArtifact1
+      }
+
+      node "Contenedor API 2\n<<execution environment>>\nFastAPI + Uvicorn" as API2 {
+        artifact "stockiv-api:1.0\nImagen OCI" as APIArtifact2
+      }
+    }
+  }
+
+  database "PostgreSQL administrado\n<<database>>\nVolumen persistente\nConexiones privadas" as PostgreSQL
+  node "Monitoreo y registros\n<<service>>\nHealth checks, métricas y logs" as Monitoring
+  node "Gestor de secretos\n<<service>>\nJWT secret y credenciales" as Secrets
+}
+
+cloud "Almacenamiento de respaldos\n<<external storage>>\nCifrado y fuera del servidor" as Backup
+
+Browser --> Internet : HTTPS 443
+Internet --> Nginx : HTTPS 443\nTLS
+Nginx --> API1 : /api/v1/*\nHTTP privado
+Nginx --> API2 : /api/v1/*\nHTTP privado
+API1 --> PostgreSQL : SQL/TLS 5432\nSQLAlchemy
+API2 --> PostgreSQL : SQL/TLS 5432\nSQLAlchemy
+API1 --> Secrets : Lee secretos al iniciar
+API2 --> Secrets : Lee secretos al iniciar
+Nginx --> Monitoring : Logs y health check
+API1 --> Monitoring : Logs, métricas y health check
+API2 --> Monitoring : Logs, métricas y health check
+PostgreSQL --> Backup : Respaldo diario\nRPO 24 h
+
+note bottom of AppServer
+  Docker Compose en la primera versión.
+  Nginx distribuye tráfico entre dos réplicas sin estado.
+  Los contenedores tienen reinicio automático y health checks.
+  El riesgo del host único se acepta en v1 con SLA >= 99.5 %,
+  se mide con monitoreo y se revisa si el objetivo no se cumple.
+end note
+
+note bottom of PostgreSQL
+  Restauración documentada con RTO de 4 h.
+  Migraciones administradas con Alembic.
+end note
+@enduml
