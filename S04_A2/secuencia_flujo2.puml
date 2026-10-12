@@ -1,0 +1,79 @@
+@startuml
+title StockIV — Flujo 2: transferencia atómica entre sucursales
+
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+  ArrowColor #1F4E79
+  ActorBorderColor #1F4E79
+  LifeLineBorderColor #5B6573
+  ParticipantBorderColor #1F4E79
+  ParticipantBackgroundColor #EAF2F8
+  DatabaseBorderColor #2E7D32
+  DatabaseBackgroundColor #E8F5E9
+}
+
+actor "Cliente\n(Browser)" as Browser
+participant "Frontend\nReact + Vite" as Frontend
+participant "Backend API\nFastAPI" as API
+database "Base de datos\nPostgreSQL" as DB
+
+Browser -> Frontend: Captura producto, origen, destino, cantidad y motivo
+Frontend -> Frontend: Valida cantidad positiva y sucursales distintas
+Frontend -> API: POST /api/v1/transfers\nAuthorization: Bearer JWT\nIdempotency-Key: UUID\nTransferCreate
+activate API
+API -> API: Valida JWT, rol y esquema
+API -> DB: Consulta Idempotency-Key y hash del cuerpo
+activate DB
+DB --> API: Estado de la clave
+deactivate DB
+
+alt Misma clave y mismo cuerpo
+  API --> Frontend: 201 TransferResult previamente almacenado
+  Frontend --> Browser: Muestra el resultado sin duplicar existencias
+else Misma clave y cuerpo diferente
+  API --> Frontend: 409 Problem\nConflicto de idempotencia
+  Frontend --> Browser: Solicita generar una clave nueva
+else Clave nueva
+  API -> DB: BEGIN TRANSACTION
+  activate DB
+  API -> DB: Busca producto y sucursales activas\ny bloquea existencias (FOR UPDATE)
+  DB --> API: Recursos y cantidades actuales
+
+  alt Recursos existentes, activos y existencia suficiente [RF-06-AC-1]
+    API -> DB: Inserta transferencia
+    API -> DB: Resta origen e inserta movimiento EXIT
+    API -> DB: Suma destino e inserta movimiento ENTRY
+    API -> DB: Actualiza existencias; lowStock se deriva\nde quantity <= threshold
+    API -> DB: Guarda resultado idempotente y COMMIT
+    DB --> API: Transferencia, movimientos y existencias finales
+    deactivate DB
+    API --> Frontend: 201 TransferResult\nLocation: /api/v1/transfers/{transferId}
+    Frontend --> Browser: Confirma transferencia y muestra nuevos saldos
+  else Producto o sucursal inexistente
+    API -> DB: ROLLBACK
+    DB --> API: Sin cambios
+    deactivate DB
+    API --> Frontend: 404 Problem\nRecurso no encontrado
+    Frontend --> Browser: Informa que el recurso ya no está disponible
+  else Recurso inactivo o existencia insuficiente [RF-06-AC-2]
+    API -> DB: ROLLBACK
+    DB --> API: Sin cambios ni movimientos parciales
+    deactivate DB
+    API --> Frontend: 409 Problem\nConflicto de inventario
+    Frontend --> Browser: Informa rechazo; conserva los saldos originales
+  else Origen=destino u otra regla semántica inválida
+    API -> DB: ROLLBACK
+    DB --> API: Sin cambios
+    deactivate DB
+    API --> Frontend: 422 ValidationProblem
+    Frontend --> Browser: Señala campos que deben corregirse
+  end
+end
+deactivate API
+
+note over Frontend,API
+Contrato: POST /api/v1/transfers
+x-acceptance-criteria: RF-06-AC-1, RF-06-AC-2,
+RF-07-AC-1, RF-07-AC-2
+end note
+@enduml

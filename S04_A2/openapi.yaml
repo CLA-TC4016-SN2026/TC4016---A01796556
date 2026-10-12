@@ -1,0 +1,1736 @@
+openapi: 3.0.3
+info:
+  title: StockIV REST API
+  version: 1.0.0
+  description: |
+    Contrato spec-first de la API de StockIV para autenticación, catálogos,
+    inventario multisucursal, movimientos, transferencias y alertas.
+    Las cantidades son unidades enteras y los importes se expresan en MXN.
+  contact:
+    name: Israel Agustín Vargas Monroy
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+  - url: https://api.stockiv.example.com
+    description: Producción de referencia
+tags:
+  - name: Autenticación
+  - name: Usuarios
+  - name: Productos
+  - name: Sucursales
+  - name: Inventario
+  - name: Movimientos
+  - name: Transferencias
+  - name: Alertas
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/auth/sessions:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión
+      operationId: createSession
+      security: []
+      x-acceptance-criteria: [RF-01-AC-1, RF-01-AC-2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesión creada y permisos resueltos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiJ9.example.signature
+                tokenType: Bearer
+                expiresIn: 1800
+                user:
+                  id: 11111111-1111-4111-8111-111111111111
+                  name: Ana Administradora
+                  email: ana@example.com
+                  role: ADMIN
+                  active: true
+                  createdAt: '2026-10-01T15:00:00Z'
+                  createdBy: 11111111-1111-4111-8111-111111111111
+                  updatedAt: '2026-10-01T15:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Credenciales inválidas o cuenta inactiva; no revela cuál condición ocurrió.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.stockiv.example.com/problems/invalid-credentials
+                title: No autenticado
+                status: 401
+                detail: Credenciales inválidas.
+                instance: /api/v1/auth/sessions
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/sessions/current:
+    delete:
+      tags: [Autenticación]
+      summary: Cerrar la sesión actual
+      operationId: deleteCurrentSession
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-01]
+      responses:
+        '204':
+          description: Token invalidado; no se devuelve cuerpo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users:
+    get:
+      tags: [Usuarios]
+      summary: Listar usuarios
+      operationId: listUsers
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-02]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: role
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Página de usuarios; operación exclusiva de Administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Usuarios]
+      summary: Crear un usuario
+      operationId: createUser
+      x-acceptance-criteria: [RF-02-AC-1, RF-02-AC-2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Usuario creado.
+          headers:
+            Location:
+              description: URI del usuario creado.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Usuarios]
+      summary: Consultar un usuario
+      operationId: getUser
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-02]
+      responses:
+        '200':
+          description: Usuario encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [Usuarios]
+      summary: Modificar rol o estado de un usuario
+      operationId: updateUser
+      x-acceptance-criteria: [RF-02-AC-2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPatch'
+      responses:
+        '200':
+          description: Usuario actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products:
+    get:
+      tags: [Productos]
+      summary: Listar y filtrar productos
+      operationId: listProducts
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-03, RF-04]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: search
+          in: query
+          description: Coincidencia parcial por SKU o nombre.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 80
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Página de productos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Productos]
+      summary: Crear un producto
+      operationId: createProduct
+      x-acceptance-criteria: [RF-03-AC-1, RF-03-AC-2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Producto creado sin alterar existencias.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: El SKU ya existe, incluso en un producto inactivo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Productos]
+      summary: Consultar un producto
+      operationId: getProduct
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-03]
+      responses:
+        '200':
+          description: Producto encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Productos]
+      summary: Reemplazar los datos editables de un producto
+      operationId: replaceProduct
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-03]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Producto reemplazado de forma idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Productos]
+      summary: Desactivar un producto
+      description: Baja lógica; conserva inventario e historial. Solo Administrador.
+      operationId: deactivateProduct
+      x-acceptance-criteria: [RF-03-AC-3]
+      responses:
+        '204':
+          description: Producto desactivado.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: El producto ya está inactivo o existe una restricción de dominio.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/branches:
+    get:
+      tags: [Sucursales]
+      summary: Listar sucursales
+      operationId: listBranches
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-09]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Página de sucursales.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Sucursales]
+      summary: Crear una sucursal
+      operationId: createBranch
+      x-acceptance-criteria: [RF-09-AC-1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchInput'
+      responses:
+        '201':
+          description: Sucursal activa creada; sus existencias iniciales son cero.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Branch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/branches/{branchId}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Sucursales]
+      summary: Consultar una sucursal
+      operationId: getBranch
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-09]
+      responses:
+        '200':
+          description: Sucursal encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Branch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Sucursales]
+      summary: Reemplazar los datos editables de una sucursal
+      operationId: replaceBranch
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-09]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchInput'
+      responses:
+        '200':
+          description: Sucursal reemplazada de forma idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Branch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Sucursales]
+      summary: Desactivar una sucursal
+      description: Baja lógica permitida solo si todas sus existencias son cero. Solo Administrador.
+      operationId: deactivateBranch
+      x-acceptance-criteria: [RF-09-AC-2, RF-09-AC-3]
+      responses:
+        '204':
+          description: Sucursal desactivada y su historial conservado.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La sucursal conserva existencias positivas o ya está inactiva.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/inventory:
+    get:
+      tags: [Inventario]
+      summary: Consultar existencias con filtros y totales
+      operationId: listInventory
+      x-acceptance-criteria: [RF-04-AC-1, RF-04-AC-2]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: search
+          in: query
+          description: SKU o nombre del producto.
+          schema:
+            type: string
+            maxLength: 120
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 80
+        - name: productActive
+          in: query
+          schema:
+            type: boolean
+        - name: branchId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Página de productos con desglose por sucursal y total consolidado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/inventory/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Inventario]
+      summary: Consultar el inventario consolidado de un producto
+      operationId: getProductInventory
+      x-acceptance-criteria: [RF-04-AC-2]
+      responses:
+        '200':
+          description: Existencias por sucursal y total general.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/inventory-thresholds/{productId}/{branchId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Inventario]
+      summary: Consultar el umbral de una combinación producto-sucursal
+      operationId: getInventoryThreshold
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-07]
+      responses:
+        '200':
+          description: Umbral y estado de alerta actuales.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLevel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Inventario]
+      summary: Crear o reemplazar un umbral mínimo
+      operationId: putInventoryThreshold
+      x-acceptance-criteria: []
+      x-supports-requirements: [RF-07]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThresholdInput'
+      responses:
+        '200':
+          description: Umbral actualizado de forma idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLevel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/movements:
+    get:
+      tags: [Movimientos]
+      summary: Consultar el historial inmutable de movimientos
+      operationId: listMovements
+      x-acceptance-criteria: [RF-08-AC-1]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: sku
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: branchId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/MovementType'
+      responses:
+        '200':
+          description: Movimientos ordenados de más reciente a más antiguo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Movimientos]
+      summary: Registrar una entrada, salida o ajuste compensatorio
+      operationId: createMovement
+      x-acceptance-criteria:
+        - RF-05-AC-1
+        - RF-05-AC-2
+        - RF-05-AC-3
+        - RF-07-AC-1
+        - RF-07-AC-2
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MovementCreate'
+            examples:
+              entry:
+                summary: Entrada normal de cuatro unidades
+                value:
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 33333333-3333-4333-8333-333333333333
+                  type: ENTRY
+                  quantity: 4
+                  reason: Recepción de mercancía
+              compensatingAdjustment:
+                summary: Ajuste que compensa un movimiento confirmado
+                value:
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 33333333-3333-4333-8333-333333333333
+                  type: ADJUSTMENT_EXIT
+                  quantity: 1
+                  reason: Corrección de captura
+                  compensatesMovementId: 44444444-4444-4444-8444-444444444444
+      responses:
+        '201':
+          description: Movimiento inmutable creado y existencia actualizada atómicamente.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementResult'
+              example:
+                movement:
+                  id: 44444444-4444-4444-8444-444444444444
+                  productId: 22222222-2222-4222-8222-222222222222
+                  productSku: TENIS-001
+                  branchId: 33333333-3333-4333-8333-333333333333
+                  branchCode: MTY-01
+                  userId: 11111111-1111-4111-8111-111111111111
+                  userName: Ana Administradora
+                  type: ENTRY
+                  quantity: 4
+                  reason: Recepción de mercancía
+                  transferId: null
+                  compensatesMovementId: null
+                  occurredAt: '2026-10-12T15:30:00Z'
+                inventory:
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 33333333-3333-4333-8333-333333333333
+                  branchCode: MTY-01
+                  branchName: Monterrey Centro
+                  quantity: 14
+                  threshold: 5
+                  lowStock: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Existencia insuficiente, recurso inactivo o clave de idempotencia reutilizada con otro cuerpo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.stockiv.example.com/problems/insufficient-stock
+                title: Conflicto de inventario
+                status: 409
+                detail: La existencia disponible es insuficiente para registrar la salida.
+                instance: /api/v1/movements
+                traceId: req-01J9STOCKIV
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/movements/{movementId}:
+    parameters:
+      - $ref: '#/components/parameters/MovementId'
+    get:
+      tags: [Movimientos]
+      summary: Consultar un movimiento inmutable
+      description: No se exponen PUT, PATCH ni DELETE para impedir su modificación o eliminación.
+      operationId: getMovement
+      x-acceptance-criteria: [RF-08-AC-1, RF-08-AC-2]
+      responses:
+        '200':
+          description: Movimiento encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/transfers:
+    get:
+      tags: [Transferencias]
+      summary: Listar transferencias
+      operationId: listTransfers
+      x-acceptance-criteria: [RF-06-AC-1]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: branchId
+          in: query
+          description: Coincide con sucursal de origen o destino.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Página de transferencias confirmadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Transferencias]
+      summary: Transferir existencias entre dos sucursales
+      operationId: createTransfer
+      x-acceptance-criteria: [RF-06-AC-1, RF-06-AC-2, RF-07-AC-1, RF-07-AC-2]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+            example:
+              productId: 22222222-2222-4222-8222-222222222222
+              sourceBranchId: 33333333-3333-4333-8333-333333333333
+              destinationBranchId: 55555555-5555-4555-8555-555555555555
+              quantity: 4
+              reason: Reabasto de sucursal norte
+      responses:
+        '201':
+          description: Transferencia y sus dos movimientos confirmados en una sola transacción.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResult'
+              example:
+                transfer:
+                  id: 66666666-6666-4666-8666-666666666666
+                  productId: 22222222-2222-4222-8222-222222222222
+                  sourceBranchId: 33333333-3333-4333-8333-333333333333
+                  destinationBranchId: 55555555-5555-4555-8555-555555555555
+                  quantity: 4
+                  reason: Reabasto de sucursal norte
+                  createdBy: 11111111-1111-4111-8111-111111111111
+                  occurredAt: '2026-10-12T16:00:00Z'
+                exitMovement:
+                  id: 77777777-7777-4777-8777-777777777777
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 33333333-3333-4333-8333-333333333333
+                  userId: 11111111-1111-4111-8111-111111111111
+                  type: EXIT
+                  quantity: 4
+                  reason: Reabasto de sucursal norte
+                  transferId: 66666666-6666-4666-8666-666666666666
+                  compensatesMovementId: null
+                  occurredAt: '2026-10-12T16:00:00Z'
+                entryMovement:
+                  id: 88888888-8888-4888-8888-888888888888
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 55555555-5555-4555-8555-555555555555
+                  userId: 11111111-1111-4111-8111-111111111111
+                  type: ENTRY
+                  quantity: 4
+                  reason: Reabasto de sucursal norte
+                  transferId: 66666666-6666-4666-8666-666666666666
+                  compensatesMovementId: null
+                  occurredAt: '2026-10-12T16:00:00Z'
+                sourceInventory:
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 33333333-3333-4333-8333-333333333333
+                  quantity: 6
+                  threshold: 3
+                  lowStock: false
+                destinationInventory:
+                  productId: 22222222-2222-4222-8222-222222222222
+                  branchId: 55555555-5555-4555-8555-555555555555
+                  quantity: 6
+                  threshold: 5
+                  lowStock: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Existencia insuficiente, recurso inactivo o conflicto de idempotencia; no se confirma ninguna parte.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.stockiv.example.com/problems/insufficient-stock
+                title: Conflicto de inventario
+                status: 409
+                detail: La sucursal de origen no tiene existencia suficiente; no se aplicó ningún cambio.
+                instance: /api/v1/transfers
+                traceId: req-02J9STOCKIV
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/transfers/{transferId}:
+    parameters:
+      - $ref: '#/components/parameters/TransferId'
+    get:
+      tags: [Transferencias]
+      summary: Consultar una transferencia y sus movimientos relacionados
+      operationId: getTransfer
+      x-acceptance-criteria: [RF-06-AC-1]
+      responses:
+        '200':
+          description: Transferencia encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/alerts:
+    get:
+      tags: [Alertas]
+      summary: Listar alertas de existencia baja
+      operationId: listLowStockAlerts
+      x-acceptance-criteria: [RF-07-AC-1, RF-07-AC-2]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: branchId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Combinaciones activas cuya existencia es menor o igual al umbral.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT firmado con identidad, rol, expiración y jti revocable.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Número de página, iniciando en 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      description: Elementos por página.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID generado por el cliente para impedir duplicados al reintentar una escritura.
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BranchId:
+      name: branchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MovementId:
+      name: movementId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TransferId:
+      name: transferId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Solicitud mal formada o regla sintáctica incumplida.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Token ausente, inválido, expirado o revocado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: El usuario está autenticado, pero su rol no permite la operación.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Recurso no encontrado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Conflicto con el estado actual o con una restricción de unicidad.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: JSON válido con campos o reglas de dominio no válidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+          example:
+            type: https://api.stockiv.example.com/problems/validation-error
+            title: Solicitud no procesable
+            status: 422
+            detail: Uno o más campos no cumplen las reglas del dominio.
+            instance: /api/v1/transfers
+            traceId: req-03J9STOCKIV
+            errors:
+              - field: destinationBranchId
+                message: Debe ser distinta de sourceBranchId.
+    InternalServerError:
+      description: Error interno no previsto; no expone información sensible.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    UserRole:
+      type: string
+      enum: [ADMIN, INVENTORY_CLERK]
+    MovementType:
+      type: string
+      enum: [ENTRY, EXIT, ADJUSTMENT_ENTRY, ADJUSTMENT_EXIT]
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+    AuthSession:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT de acceso.
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          description: Vigencia máxima en segundos; la sesión también expira tras 30 minutos de inactividad.
+          minimum: 1
+          example: 1800
+        user:
+          $ref: '#/components/schemas/User'
+    UserCreate:
+      type: object
+      additionalProperties: false
+      required: [name, email, role, temporaryPassword]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        role:
+          $ref: '#/components/schemas/UserRole'
+        temporaryPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,128}$'
+    UserPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        role:
+          $ref: '#/components/schemas/UserRole'
+        active:
+          type: boolean
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, role, active, createdAt, createdBy]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+        updatedAt:
+          type: string
+          format: date-time
+    ProductInput:
+      type: object
+      additionalProperties: false
+      required: [sku, name, category, price]
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 40
+          pattern: '^[A-Z0-9-]+$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        category:
+          type: string
+          minLength: 1
+          maxLength: 80
+        size:
+          type: string
+          maxLength: 50
+          nullable: true
+        color:
+          type: string
+          maxLength: 50
+          nullable: true
+        price:
+          type: number
+          format: double
+          minimum: 0
+          multipleOf: 0.01
+          example: 899.90
+    Product:
+      type: object
+      additionalProperties: false
+      required: [id, sku, name, category, price, active, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 40
+          pattern: '^[A-Z0-9-]+$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        category:
+          type: string
+          minLength: 1
+          maxLength: 80
+        size:
+          type: string
+          maxLength: 50
+          nullable: true
+        color:
+          type: string
+          maxLength: 50
+          nullable: true
+        price:
+          type: number
+          format: double
+          minimum: 0
+          multipleOf: 0.01
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BranchInput:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 12
+          pattern: '^[A-Z0-9-]+$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+    Branch:
+      type: object
+      additionalProperties: false
+      required: [id, code, name, active, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          minLength: 2
+          maxLength: 12
+          pattern: '^[A-Z0-9-]+$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    InventoryLevel:
+      type: object
+      additionalProperties: false
+      required: [productId, branchId, quantity, threshold, lowStock]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        branchId:
+          type: string
+          format: uuid
+        branchCode:
+          type: string
+        branchName:
+          type: string
+        quantity:
+          type: integer
+          minimum: 0
+        threshold:
+          type: integer
+          minimum: 0
+        lowStock:
+          type: boolean
+          description: Verdadero cuando quantity es menor o igual a threshold.
+    InventoryItem:
+      type: object
+      additionalProperties: false
+      required: [product, levels, totalQuantity]
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryLevel'
+        totalQuantity:
+          type: integer
+          minimum: 0
+    ThresholdInput:
+      type: object
+      additionalProperties: false
+      required: [threshold]
+      properties:
+        threshold:
+          type: integer
+          minimum: 0
+    MovementCreate:
+      description: Movimiento normal o ajuste compensatorio; las variantes son mutuamente excluyentes.
+      oneOf:
+        - $ref: '#/components/schemas/NormalMovementCreate'
+        - $ref: '#/components/schemas/CompensatingMovementCreate'
+    NormalMovementCreate:
+      type: object
+      additionalProperties: false
+      required: [productId, branchId, type, quantity, reason]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        branchId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ENTRY, EXIT]
+        quantity:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 200
+    CompensatingMovementCreate:
+      type: object
+      additionalProperties: false
+      required: [productId, branchId, type, quantity, reason, compensatesMovementId]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        branchId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ADJUSTMENT_ENTRY, ADJUSTMENT_EXIT]
+        quantity:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 200
+        compensatesMovementId:
+          type: string
+          format: uuid
+          description: Movimiento confirmado que este ajuste corrige sin modificarlo.
+    Movement:
+      type: object
+      additionalProperties: false
+      required: [id, productId, branchId, userId, type, quantity, reason, occurredAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        productSku:
+          type: string
+        branchId:
+          type: string
+          format: uuid
+        branchCode:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        type:
+          $ref: '#/components/schemas/MovementType'
+        quantity:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+        transferId:
+          type: string
+          format: uuid
+          nullable: true
+        compensatesMovementId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+    MovementResult:
+      type: object
+      additionalProperties: false
+      required: [movement, inventory]
+      properties:
+        movement:
+          $ref: '#/components/schemas/Movement'
+        inventory:
+          $ref: '#/components/schemas/InventoryLevel'
+    TransferCreate:
+      type: object
+      additionalProperties: false
+      description: La API valida que sourceBranchId y destinationBranchId sean distintos; si coinciden responde 422.
+      required: [productId, sourceBranchId, destinationBranchId, quantity, reason]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        sourceBranchId:
+          type: string
+          format: uuid
+        destinationBranchId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 200
+    Transfer:
+      type: object
+      additionalProperties: false
+      required: [id, productId, sourceBranchId, destinationBranchId, quantity, reason, createdBy, occurredAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        sourceBranchId:
+          type: string
+          format: uuid
+        destinationBranchId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+        createdBy:
+          type: string
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+    TransferResult:
+      type: object
+      additionalProperties: false
+      required: [transfer, exitMovement, entryMovement, sourceInventory, destinationInventory]
+      properties:
+        transfer:
+          $ref: '#/components/schemas/Transfer'
+        exitMovement:
+          $ref: '#/components/schemas/Movement'
+        entryMovement:
+          $ref: '#/components/schemas/Movement'
+        sourceInventory:
+          $ref: '#/components/schemas/InventoryLevel'
+        destinationInventory:
+          $ref: '#/components/schemas/InventoryLevel'
+    Alert:
+      type: object
+      additionalProperties: false
+      required: [productId, sku, branchId, branchCode, quantity, threshold, lowStock]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        productName:
+          type: string
+        branchId:
+          type: string
+          format: uuid
+        branchCode:
+          type: string
+        branchName:
+          type: string
+        quantity:
+          type: integer
+          minimum: 0
+        threshold:
+          type: integer
+          minimum: 0
+        lowStock:
+          type: boolean
+          enum: [true]
+    PageMeta:
+      type: object
+      additionalProperties: false
+      required: [page, pageSize, totalItems, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalItems:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    UserPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    ProductPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    BranchPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Branch'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    InventoryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    MovementPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movement'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    TransferPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transfer'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    AlertPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+        traceId:
+          type: string
+          description: Identificador para soporte; no revela detalles internos.
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    ValidationProblem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, instance, errors]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          enum: [422]
+        detail:
+          type: string
+        instance:
+          type: string
+        traceId:
+          type: string
+          description: Identificador para soporte; no revela detalles internos.
+        errors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/FieldError'

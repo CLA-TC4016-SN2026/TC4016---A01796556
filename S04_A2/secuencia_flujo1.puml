@@ -1,0 +1,51 @@
+@startuml
+title StockIV — Flujo 1: autenticación de usuario
+
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+  ArrowColor #1F4E79
+  ActorBorderColor #1F4E79
+  LifeLineBorderColor #5B6573
+  ParticipantBorderColor #1F4E79
+  ParticipantBackgroundColor #EAF2F8
+  DatabaseBorderColor #2E7D32
+  DatabaseBackgroundColor #E8F5E9
+}
+
+actor "Cliente\n(Browser)" as Browser
+participant "Frontend\nReact + Vite" as Frontend
+participant "Backend API\nFastAPI" as API
+database "Base de datos\nPostgreSQL" as DB
+
+Browser -> Frontend: Captura correo y contraseña
+Frontend -> Frontend: Valida formato y campos requeridos
+Frontend -> API: POST /api/v1/auth/sessions\n{email, password}
+activate API
+API -> API: Valida esquema LoginRequest
+API -> DB: SELECT usuario por email normalizado
+activate DB
+DB --> API: Usuario, hash, rol y estado
+deactivate DB
+
+alt Usuario activo y contraseña válida [RF-01-AC-1]
+  API -> API: Verifica hash y genera JWT\n(sub, role, exp, jti)
+  API -> DB: Registra sesión/jti y última actividad
+  activate DB
+  DB --> API: Sesión registrada
+  deactivate DB
+  API --> Frontend: 200 AuthSession\n{accessToken, expiresIn, user}
+  Frontend -> Frontend: Conserva sesión y habilita vistas según rol
+  Frontend --> Browser: Muestra pantalla de inventario
+else Credenciales inválidas o cuenta inactiva [RF-01-AC-2]
+  API -> API: No crea sesión y evita revelar la causa
+  API --> Frontend: 401 Problem\n"Credenciales inválidas"
+  Frontend --> Browser: Muestra mensaje genérico
+end
+deactivate API
+
+note over Frontend,API
+Contrato: POST /api/v1/auth/sessions
+x-acceptance-criteria: RF-01-AC-1, RF-01-AC-2
+end note
+@enduml
+
